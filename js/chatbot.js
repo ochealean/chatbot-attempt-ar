@@ -35,7 +35,7 @@ let messages = [
     }
 ];
 
-// Initialize quick questions
+// Quick questions data
 const quickQuestions = {
     "Features": [
         "How does the AR try-on work?",
@@ -54,6 +54,7 @@ const quickQuestions = {
     ]
 };
 
+// Initialize quick questions buttons
 function updateQuickQuestions() {
     quickQuestionsContainer.innerHTML = '';
 
@@ -76,18 +77,17 @@ function updateQuickQuestions() {
     }
 }
 
+// Handle auth state changes
 onAuthStateChanged(auth, (user) => {
     if (user) {
-        // User is signed in
         console.log("User signed in:", user.uid);
     } else {
-        // User is signed out
         console.log("User signed out");
     }
 });
 
+// Format message text with bold support and prevent XSS
 function formatMessageText(text) {
-    // First escape HTML to prevent XSS
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML
@@ -95,6 +95,7 @@ function formatMessageText(text) {
         .replace(/\n/g, '<br>');
 }
 
+// Add message to chat with animation
 function addMessageToChat(role, content) {
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message', `${role}-message`);
@@ -106,7 +107,7 @@ function addMessageToChat(role, content) {
     messageDiv.appendChild(contentWrapper);
     chatMessages.appendChild(messageDiv);
     
-    // Smooth scroll to bottom with animation
+    // Animation effects
     messageDiv.style.opacity = '0';
     messageDiv.style.transform = 'translateY(10px)';
     messageDiv.style.transition = 'all 0.3s ease-out';
@@ -121,6 +122,7 @@ function addMessageToChat(role, content) {
     }, 10);
 }
 
+// Send message to ChatGPT API
 async function sendMessage() {
     const userMessage = inputField.value.trim();
     if (!userMessage) return;
@@ -173,11 +175,13 @@ async function sendMessage() {
     }
 }
 
+// Handle quick question clicks
 function askQuestion(question) {
     inputField.value = question;
     sendMessage();
 }
 
+// Set up event listeners
 function setupEventListeners() {
     inputField.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
@@ -194,6 +198,7 @@ function setupEventListeners() {
     });
 }
 
+// Initialize the chatbot
 function initChatbot() {
     setupEventListeners();
     updateQuickQuestions();
@@ -209,5 +214,8 @@ function initChatbot() {
     }, 1000);
 }
 
+// Make askQuestion available globally
 window.askQuestion = askQuestion;
+
+// Start the chatbot when the page loads
 document.addEventListener('DOMContentLoaded', initChatbot);
