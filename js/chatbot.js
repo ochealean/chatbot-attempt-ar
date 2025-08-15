@@ -53,7 +53,7 @@ function loadResponsesFromFirebase() {
                     firebaseKey: key,
                     popularity: response.popularity || 0,
                     lastQuestionSentence: response.lastQuestionSentence || response.keyword,
-                    category: response.category || 'general' // Default to general if no category specified
+                    category: response.category || 'general'
                 };
             }
             return acc;
@@ -89,19 +89,15 @@ onAuthStateChanged(auth, (user) => {
 });
 
 function updateQuickQuestions() {
-    // Clear existing questions
     quickQuestionsContainer.innerHTML = '';
 
-    // Get all responses as array
     const allResponses = Object.values(faqResponses)
         .filter(response => response.lastQuestionSentence && response.popularity > 0);
 
-    // 1. Popular Questions (top 3 by popularity)
     const popularQuestions = [...allResponses]
         .sort((a, b) => b.popularity - a.popularity)
         .slice(0, 3);
 
-    // 2. Categorized Questions (top 3 from each category by popularity)
     const featuresQuestions = allResponses
         .filter(response => response.category === 'feature')
         .sort((a, b) => b.popularity - a.popularity)
@@ -117,13 +113,11 @@ function updateQuickQuestions() {
         .sort((a, b) => b.popularity - a.popularity)
         .slice(0, 3);
 
-    // Create containers for each section
     const popularDiv = createQuestionCategory('Popular Questions', popularQuestions);
     const featuresDiv = createQuestionCategory('Features', featuresQuestions);
     const ordersDiv = createQuestionCategory('Orders', ordersQuestions);
     const helpDiv = createQuestionCategory('Help', helpQuestions);
 
-    // Add default questions if any category is empty
     if (popularQuestions.length === 0) {
         popularDiv.appendChild(createQuestionButton("How does the AR try-on work?"));
         popularDiv.appendChild(createQuestionButton("What are my shipping options?"));
@@ -148,7 +142,6 @@ function updateQuickQuestions() {
         helpDiv.appendChild(createQuestionButton("I need sizing help"));
     }
 
-    // Append all sections to the container
     quickQuestionsContainer.appendChild(popularDiv);
     quickQuestionsContainer.appendChild(featuresDiv);
     quickQuestionsContainer.appendChild(ordersDiv);
@@ -220,16 +213,13 @@ function updateResponseUsage(responseKey, question) {
     });
 }
 
-async function sendMessage() {
+function sendMessage() {
     const userMessage = inputField.value.trim();
     if (!userMessage) return;
 
-    // Add user message to chat and messages array
     addMessageToChat("user", userMessage);
-    messages.push({ role: "user", content: userMessage });
     inputField.value = '';
 
-    // Show typing indicator
     const typingIndicator = document.createElement('div');
     typingIndicator.textContent = "Assistant is typing...";
     typingIndicator.id = "typing-indicator";
@@ -238,28 +228,11 @@ async function sendMessage() {
     chatMessages.appendChild(typingIndicator);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ messages })
-        });
-
-        const data = await response.json();
-
-        // Remove typing indicator
+    setTimeout(() => {
         chatMessages.removeChild(typingIndicator);
-
-        // Add assistant response to chat and messages array
-        addMessageToChat("assistant", data.response);
-        messages.push({ role: "assistant", content: data.response });
-    } catch (error) {
-        console.error("Error:", error);
-        chatMessages.removeChild(typingIndicator);
-        addMessageToChat("assistant", "Sorry, I encountered an error. Please try again.");
-    }
+        const response = getBestResponse(userMessage);
+        addMessageToChat("assistant", response);
+    }, 1000);
 }
 
 function askQuestion(question) {
@@ -267,7 +240,7 @@ function askQuestion(question) {
 
     setTimeout(() => {
         const response = getBestResponse(question);
-        addMessageToChat('bot', response);
+        addMessageToChat('assistant', response);
     }, 500);
 }
 
@@ -305,24 +278,20 @@ function addMessageToChat(role, content) {
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message', `${role}-message`);
     
-    // Convert double asterisks to bold tags
-    let formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
-    // Create a wrapper div for the content
     const contentWrapper = document.createElement('div');
     contentWrapper.classList.add('message-content');
-    contentWrapper.innerHTML = formattedContent; // This will render HTML tags
+    contentWrapper.innerHTML = formattedContent;
     
     messageDiv.appendChild(contentWrapper);
     chatMessages.appendChild(messageDiv);
     
-    // Smooth scroll to bottom
     chatMessages.scrollTo({
         top: chatMessages.scrollHeight,
         behavior: 'smooth'
     });
 }
-
 
 window.askQuestion = askQuestion;
 document.addEventListener('DOMContentLoaded', initChatbot);
