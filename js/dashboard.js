@@ -39,7 +39,7 @@ onAuthStateChanged(auth, (user) => {
                 }
             });
     } else {
-        window.location.href = "/user_login.html";
+        // window.location.href = "/user_login.html";
     }
 });
 
