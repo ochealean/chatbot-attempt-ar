@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
-import { getDatabase, ref, onValue, get, update } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
 import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -15,233 +14,168 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth();
-const db = getDatabase(app);
-const chatbotResponsesRef = ref(db, 'AR_shoe_users/chatbot/responses');
 
 // DOM Elements
-let messages = [];
 const inputField = document.getElementById('user-input');
 const sendButton = document.getElementById('send-button');
 const chatMessages = document.getElementById('chat-messages');
 const quickQuestionsContainer = document.querySelector('.quick-questions .question-categories');
 
-let faqResponses = {};
-let responseKeys = {};
-
-function createDefaultResponse() {
-    return `<div class="troubleshooting-section">
-        I'm sorry, I couldn't find an answer to that question. Here are some topics I can help with:<br><br>
-        <strong>Features:</strong> AR try-on, Customization, Products<br>
-        <strong>Orders:</strong> Shipping, Returns, Payments<br>
-        <strong>Help:</strong> Issues, Problems, Troubleshooting<br><br>
-        Try asking about one of these topics or click any quick question above!
-        </div>`;
-}
-
-function loadResponsesFromFirebase() {
-    onValue(chatbotResponsesRef, (snapshot) => {
-        const responses = snapshot.val() || {};
-
-        responseKeys = responses;
-        faqResponses = Object.entries(responses).reduce((acc, [key, response]) => {
-            if (response.keyword && response.responses) {
-                const keyword = response.keyword.toLowerCase();
-                acc[keyword] = {
-                    response: Array.isArray(response.responses)
-                        ? response.responses.join('<br>')
-                        : response.responses,
-                    firebaseKey: key,
-                    popularity: response.popularity || 0,
-                    lastQuestionSentence: response.lastQuestionSentence || response.keyword,
-                    category: response.category || 'general'
-                };
-            }
-            return acc;
-        }, {});
-
-        faqResponses.default = {
-            response: createDefaultResponse(),
-            firebaseKey: null,
-            popularity: 0,
-            lastQuestionSentence: "Help topics",
-            category: 'general'
-        };
-
-        updateQuickQuestions();
-
-    }, (error) => {
-        console.error("Error loading responses:", error);
-    });
-}
-
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        get(ref(db, `AR_shoe_users/customer/${user.uid}`))
-            .then((snapshot) => {
-                if (!snapshot.exists()) {
-                    alert("Account does not exist");
-                    auth.signOut();
-                }
-            });
-    } else {
-        // window.location.href = "/user_login.html";
+// Chat messages array
+let messages = [
+    { 
+        role: "system", 
+        content: "You are a helpful assistant for SmartFit Shoes. Help customers with:" +
+                "\n- AR shoe try-on features" +
+                "\n- Product customization options" +
+                "\n- Order status and shipping" +
+                "\n- Returns and exchanges" +
+                "\n- Product information and sizing" +
+                "\n\nAlways be polite, helpful, and provide detailed answers."
     }
-});
+];
+
+// Initialize quick questions
+const quickQuestions = {
+    "Features": [
+        "How does the AR try-on work?",
+        "Can I customize my shoes?",
+        "What products do you offer?"
+    ],
+    "Orders": [
+        "What are my shipping options?",
+        "How do returns work?",
+        "What payment methods do you accept?"
+    ],
+    "Help": [
+        "I have an issue with my order",
+        "My product has a problem",
+        "I need sizing help"
+    ]
+};
 
 function updateQuickQuestions() {
     quickQuestionsContainer.innerHTML = '';
 
-    const allResponses = Object.values(faqResponses)
-        .filter(response => response.lastQuestionSentence && response.popularity > 0);
+    for (const [category, questions] of Object.entries(quickQuestions)) {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'category';
 
-    const popularQuestions = [...allResponses]
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 3);
+        const header = document.createElement('h4');
+        header.textContent = category;
+        categoryDiv.appendChild(header);
 
-    const featuresQuestions = allResponses
-        .filter(response => response.category === 'feature')
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 3);
+        questions.forEach(question => {
+            const button = document.createElement('button');
+            button.textContent = question;
+            button.addEventListener('click', () => askQuestion(question));
+            categoryDiv.appendChild(button);
+        });
 
-    const ordersQuestions = allResponses
-        .filter(response => response.category === 'orders')
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 3);
-
-    const helpQuestions = allResponses
-        .filter(response => response.category === 'help')
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 3);
-
-    const popularDiv = createQuestionCategory('Popular Questions', popularQuestions);
-    const featuresDiv = createQuestionCategory('Features', featuresQuestions);
-    const ordersDiv = createQuestionCategory('Orders', ordersQuestions);
-    const helpDiv = createQuestionCategory('Help', helpQuestions);
-
-    if (popularQuestions.length === 0) {
-        popularDiv.appendChild(createQuestionButton("How does the AR try-on work?"));
-        popularDiv.appendChild(createQuestionButton("What are my shipping options?"));
-        popularDiv.appendChild(createQuestionButton("How do returns work?"));
+        quickQuestionsContainer.appendChild(categoryDiv);
     }
-
-    if (featuresQuestions.length === 0) {
-        featuresDiv.appendChild(createQuestionButton("How does the AR try-on work?"));
-        featuresDiv.appendChild(createQuestionButton("Can I customize my shoes?"));
-        featuresDiv.appendChild(createQuestionButton("What products do you offer?"));
-    }
-
-    if (ordersQuestions.length === 0) {
-        ordersDiv.appendChild(createQuestionButton("What are my shipping options?"));
-        ordersDiv.appendChild(createQuestionButton("How do returns work?"));
-        ordersDiv.appendChild(createQuestionButton("What payment methods do you accept?"));
-    }
-
-    if (helpQuestions.length === 0) {
-        helpDiv.appendChild(createQuestionButton("I have an issue with my order"));
-        helpDiv.appendChild(createQuestionButton("My product has a problem"));
-        helpDiv.appendChild(createQuestionButton("I need sizing help"));
-    }
-
-    quickQuestionsContainer.appendChild(popularDiv);
-    quickQuestionsContainer.appendChild(featuresDiv);
-    quickQuestionsContainer.appendChild(ordersDiv);
-    quickQuestionsContainer.appendChild(helpDiv);
 }
 
-function createQuestionCategory(title, questions) {
-    const categoryDiv = document.createElement('div');
-    categoryDiv.className = 'category';
-
-    const header = document.createElement('h4');
-    header.textContent = title;
-    categoryDiv.appendChild(header);
-
-    questions.forEach(response => {
-        const button = createQuestionButton(response.lastQuestionSentence);
-        categoryDiv.appendChild(button);
-    });
-
-    return categoryDiv;
-}
-
-function createQuestionButton(question) {
-    const button = document.createElement('button');
-    button.textContent = question;
-    button.addEventListener('click', () => {
-        askQuestion(question);
-    });
-    return button;
-}
-
-function getBestResponse(input) {
-    const lowerInput = input.toLowerCase().trim();
-
-    if (faqResponses[lowerInput]) {
-        updateResponseUsage(faqResponses[lowerInput].firebaseKey, input);
-        return faqResponses[lowerInput].response;
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        // User is signed in
+        console.log("User signed in:", user.uid);
+    } else {
+        // User is signed out
+        console.log("User signed out");
     }
+});
 
-    const matchingKey = Object.keys(faqResponses).find(key =>
-        key !== 'default' && lowerInput.includes(key)
-    );
-
-    if (matchingKey) {
-        updateResponseUsage(faqResponses[matchingKey].firebaseKey, input);
-        return faqResponses[matchingKey].response;
-    }
-
-    return faqResponses.default.response;
+function formatMessageText(text) {
+    // First escape HTML to prevent XSS
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
 }
 
-function updateResponseUsage(responseKey, question) {
-    if (!responseKey) return;
-
-    const responseRef = ref(db, `AR_shoe_users/chatbot/responses/${responseKey}`);
-    get(responseRef).then((snapshot) => {
-        const response = snapshot.val();
-        if (response) {
-            const currentPopularity = response.popularity || 0;
-            update(responseRef, {
-                popularity: currentPopularity + 1,
-                lastQuestionSentence: question
-            }).then(() => {
-                loadResponsesFromFirebase();
-            }).catch(error => {
-                console.error("Error updating response usage:", error);
-            });
-        }
-    });
+function addMessageToChat(role, content) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', `${role}-message`);
+    
+    const contentWrapper = document.createElement('div');
+    contentWrapper.classList.add('message-content');
+    contentWrapper.innerHTML = formatMessageText(content);
+    
+    messageDiv.appendChild(contentWrapper);
+    chatMessages.appendChild(messageDiv);
+    
+    // Smooth scroll to bottom with animation
+    messageDiv.style.opacity = '0';
+    messageDiv.style.transform = 'translateY(10px)';
+    messageDiv.style.transition = 'all 0.3s ease-out';
+    
+    setTimeout(() => {
+        messageDiv.style.opacity = '1';
+        messageDiv.style.transform = 'translateY(0)';
+        chatMessages.scrollTo({
+            top: chatMessages.scrollHeight,
+            behavior: 'smooth'
+        });
+    }, 10);
 }
 
-function sendMessage() {
+async function sendMessage() {
     const userMessage = inputField.value.trim();
     if (!userMessage) return;
 
+    // Add user message to chat
     addMessageToChat("user", userMessage);
+    messages.push({ role: "user", content: userMessage });
     inputField.value = '';
 
+    // Show typing indicator
     const typingIndicator = document.createElement('div');
-    typingIndicator.textContent = "Assistant is typing...";
     typingIndicator.id = "typing-indicator";
-    typingIndicator.style.fontStyle = "italic";
-    typingIndicator.style.color = "#666";
+    typingIndicator.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <span>Assistant is typing</span>
+            <div class="typing-dots">
+                <span>.</span><span>.</span><span>.</span>
+            </div>
+        </div>
+    `;
     chatMessages.appendChild(typingIndicator);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    setTimeout(() => {
+    try {
+        const response = await fetch('https://github-chat-backend.onrender.com/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ messages })
+        });
+        
+        const data = await response.json();
+        
+        // Remove typing indicator
         chatMessages.removeChild(typingIndicator);
-        const response = getBestResponse(userMessage);
-        addMessageToChat("assistant", response);
-    }, 1000);
+        
+        // Add assistant response
+        addMessageToChat("assistant", data.response);
+        messages.push({ role: "assistant", content: data.response });
+        
+    } catch (error) {
+        console.error("Error:", error);
+        chatMessages.removeChild(typingIndicator);
+        addMessageToChat("assistant", 
+            "Sorry, I'm having trouble connecting to the assistant. Please try again later.\n\n" +
+            "For immediate help, you can:\n" +
+            "1. Email support@smartfitshoes.com\n" +
+            "2. Call our helpline at (800) 555-0199");
+    }
 }
 
 function askQuestion(question) {
-    addMessageToChat('user', question);
-
-    setTimeout(() => {
-        const response = getBestResponse(question);
-        addMessageToChat('assistant', response);
-    }, 500);
+    inputField.value = question;
+    sendMessage();
 }
 
 function setupEventListeners() {
@@ -250,12 +184,21 @@ function setupEventListeners() {
     });
 
     sendButton.addEventListener('click', sendMessage);
+
+    document.getElementById('logout_btn').addEventListener('click', () => {
+        auth.signOut().then(() => {
+            console.log("User signed out");
+        }).catch((error) => {
+            console.error("Error signing out: ", error);
+        });
+    });
 }
 
 function initChatbot() {
-    loadResponsesFromFirebase();
     setupEventListeners();
+    updateQuickQuestions();
 
+    // Show welcome message after a short delay
     setTimeout(() => {
         addMessageToChat('assistant', `Welcome to SmartFit's Help Center! 👟<br><br>
             How can I assist you today? Try asking about:<br>
@@ -264,33 +207,6 @@ function initChatbot() {
             - Returns policy<br>
             - Product customization`);
     }, 1000);
-}
-
-document.getElementById('logout_btn').addEventListener('click', () => {
-    auth.signOut().then(() => {
-        console.log("User signed out");
-    }).catch((error) => {
-        console.error("Error signing out: ", error);
-    });
-});
-
-function addMessageToChat(role, content) {
-    const messageDiv = document.createElement('div');
-    messageDiv.classList.add('message', `${role}-message`);
-    
-    const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    const contentWrapper = document.createElement('div');
-    contentWrapper.classList.add('message-content');
-    contentWrapper.innerHTML = formattedContent;
-    
-    messageDiv.appendChild(contentWrapper);
-    chatMessages.appendChild(messageDiv);
-    
-    chatMessages.scrollTo({
-        top: chatMessages.scrollHeight,
-        behavior: 'smooth'
-    });
 }
 
 window.askQuestion = askQuestion;
